@@ -1,14 +1,20 @@
-=== In Progress Multiplayer Chess Engine ===
+# Advanced Chess Engine
 
-> Adding Docker local servers
+Original Repo - https://github.com/SirVoRaK/chess
 
-> Adding mysql local server login/register
+Starting to build off of SirVoRaks work and add personal changes
 
-> Connecting to test multiplayer
-
-> Using existing repo's
-
-> Adding classes for multi
+A custom version of the multiplayer chess engine (In Progress)
 
 
+=== Custom Changes === 
 
+- Added changes to Docker files for simplicity
+- MySQL Port changes
+- Fixing Socket issue (In Progress)
+- Added .env
+
+=== Upcoming === 
+
+- New interface (In Progress)
+- My own server (In Progress)
