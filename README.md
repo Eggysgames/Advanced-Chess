@@ -19,3 +19,4 @@ A custom version of the multiplayer chess engine (In Progress)
 
 - New interface (In Progress)
 - My own server (In Progress)
+- Change to Typescript (In Progress)
