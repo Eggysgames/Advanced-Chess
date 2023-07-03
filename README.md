@@ -6,6 +6,7 @@ Starting to build off of SirVoRaks work and add personal changes
 
 A custom version of the multiplayer chess engine (In Progress)
 
+> Fixing SMTP Error
 
 === Custom Changes === 
 
