@@ -13,13 +13,24 @@ import { encrypt } from './modules/encript.js'
 import { sendEmail } from './modules/email.js'
 import { loadEngine } from './loadEngine.js'
 
-sendEmail(process.env.EMAIL_USER, 'start', 'start')
-
 const __dirname = path.resolve()
 
 const app = express()
 const httpServer = createServer(app)
 const io = new Server(httpServer)
+
+app.use((req, res, next) => {
+    if (
+        req.headers.accept.includes('text/html') ||
+        req.url.includes('worker') ||
+        req.url.includes('stockfish.js')
+    ) {
+        res.header('Cross-Origin-Opener-Policy', 'same-origin')
+        res.header('Cross-Origin-Embedder-Policy', 'require-corp')
+        res.header('Cross-Origin-Resource-Policy', 'cross-origin')
+    }
+    next()
+})
 
 app.use(express.static('public'))
 app.use(express.json())
@@ -53,7 +64,7 @@ async function getEloFromToken(token) {
             username: null,
         }
     }
-    const user = await mysqlQuery(`select * from users where token = '${token}'`)
+    const user = await mysqlQuery(`select username, elo from users where token = ?`, [token])
     if (user.length === 0) {
         return {
             elo: null,
@@ -71,7 +82,8 @@ async function login(username, password) {
         try {
             const encryptedPassword = encrypt(password)
             const user = await mysqlQuery(
-                `select * from users where (username = '${username}' or email = '${username}') and password = '${encryptedPassword}'`,
+                'select * from users where (username = ? or email = ?) and password = ?',
+                [username + '', username + '', encryptedPassword + ''],
             )
             if (user.length === 0) {
                 reject(new Error('Invalid username or password'))
@@ -87,16 +99,17 @@ async function login(username, password) {
                 return
             }
             let newToken = randStr(40)
-            const token = await mysqlQuery(`select token from users where token = '${newToken}'`)
+            const token = await mysqlQuery(`select token from users where token = ?`, [newToken])
             if (token.length > 0) {
                 while (newToken === token[0].token) {
                     newToken = randStr(10)
                 }
             }
             await mysqlQuery(
-                `update users set token = '${newToken}' where (username = '${username}' or email = '${username}') and password = '${encryptedPassword}'`,
+                `update users set token = ? where (username = ? or email = ?) and password = ?`,
+                [newToken, username, username, encryptedPassword],
             )
-            resolve((await mysqlQuery(`select * from users where token = '${newToken}'`))[0])
+            resolve((await mysqlQuery(`select * from users where token = ?`, [newToken]))[0])
         } catch (error) {
             reject(error)
         }
@@ -130,14 +143,14 @@ app.post('/account/login', (req, res) => {
     password = password.trim()
 
     if (username.length === 0) {
-        res.json({
+        res.status(400).json({
             success: false,
             error: 'Username cannot be empty',
         })
         return
     }
     if (password.length === 0) {
-        res.json({
+        res.status(400).json({
             success: false,
             error: 'Password cannot be empty',
         })
@@ -153,13 +166,13 @@ app.post('/account/login', (req, res) => {
                     username: user.username,
                 })
             } else {
-                res.json({
+                res.status(500).json({
                     success: false,
                 })
             }
         })
         .catch((e) => {
-            res.json({
+            res.status(500).json({
                 success: false,
                 error: e.message,
             })
@@ -196,25 +209,24 @@ app.post('/account/verify', async (req, res) => {
     email = email.trim()
     code = code.trim()
     if (code.length !== verificationCodeLength) {
-        res.send({
+        res.status(400).send({
             success: false,
         })
         return
     }
-    if (verifications[email] === code) {
-        try {
-            await mysqlQuery(`update users set verified = true where email = '${email}'`)
-            delete verifications[email]
-            res.json({
-                success: true,
-            })
-        } catch (e) {
-            res.json({
-                success: false,
-            })
-        }
-    } else {
+    if (verifications[email] !== code)
+        return res.status(400).json({
+            success: false,
+        })
+
+    try {
+        await mysqlQuery(`update users set verified = true where email = ?`, [email])
+        delete verifications[email]
         res.json({
+            success: true,
+        })
+    } catch (e) {
+        res.status(500).json({
             success: false,
         })
     }
@@ -237,37 +249,37 @@ app.post('/account/register', (req, res) => {
 
     //empty
     if (username.length === 0) {
-        res.json(error('Username cannot be empty'))
+        res.status(400).json(error('Username cannot be empty'))
         return
     }
     if (password.length === 0) {
-        res.json(error('Password cannot be empty'))
+        res.status(400).json(error('Password cannot be empty'))
         return
     }
     if (email.length === 0) {
-        res.json(error('Email cannot be empty'))
+        res.status(400).json(error('Email cannot be empty'))
         return
     }
 
     //validation
     if (!validadeUsername(username)) {
-        res.json(
+        res.status(400).json(
             error('Username must have only letter and numbers and be between 4 and 20 characters'),
         )
         return
     }
     if (!validadePassword(password)) {
-        res.json(error('Password must be between 6 and 30 characters'))
+        res.status(400).json(error('Password must be between 6 and 30 characters'))
         return
     }
     if (!validadeEmail(email)) {
-        res.json(error('Email is not valid'))
+        res.status(400).json(error('Email is not valid'))
         return
     }
 
     //password match
     if (password !== confirmPassword) {
-        res.json(error("Passwords don't match"))
+        res.status(400).json(error("Passwords don't match"))
         return
     }
 
@@ -290,7 +302,7 @@ app.post('/account/register', (req, res) => {
             })
         })
         .catch((e) => {
-            res.json({
+            res.status(500).json({
                 success: false,
                 error: e.message,
             })
@@ -432,6 +444,9 @@ function Game(id, time, rated = false, isPublic = false) {
 
     let state = 0
 
+    let startedDate = null
+    let endedDate = null
+
     const roomOwner = {
         username: null,
         elo: null,
@@ -451,12 +466,14 @@ function Game(id, time, rated = false, isPublic = false) {
 
     const players = {
         white: {
+            id: null,
             socket: null,
             timer: new Timer(secToMs(gameTime)),
             token: null,
             info: null,
         },
         black: {
+            id: null,
             socket: null,
             timer: new Timer(secToMs(gameTime)),
             token: null,
@@ -465,12 +482,23 @@ function Game(id, time, rated = false, isPublic = false) {
     }
 
     setInterval(() => {
+        if (state !== 1) return
         if (msToSec(players.white.timer.getTime()) <= 0) {
             win('black')
             io.to(id).emit('time-out', 'white')
+            io.to(id).emit('update-timers', {
+                white: 0,
+                black: players.black.timer.getTime(),
+                running: null,
+            })
         } else if (msToSec(players.black.timer.getTime()) <= 0) {
             win('white')
             io.to(id).emit('time-out', 'black')
+            io.to(id).emit('update-timers', {
+                white: players.white.timer.getTime(),
+                black: 0,
+                running: null,
+            })
         }
     }, 100)
 
@@ -495,29 +523,41 @@ function Game(id, time, rated = false, isPublic = false) {
         }
     }
 
+    engine.postMessage('uci')
+    engine.postMessage('isready')
+
     engine.postMessage('ucinewgame')
     engine.postMessage('position startpos')
 
     function win(color) {
         console.log(`> Room ${id}: ${color} is victorious`)
+        endedDate = new Date()
         state = 2
         if (players[color].token && rated) {
-            mysqlQuery(
-                `update users set elo = ${players[color].info.elo + 10} where token = '${
-                    players[color].token
-                }'`,
-            )
+            mysqlQuery(`update users set elo = ${players[color].info.elo + 10} where token = ?`, [
+                players[color].token,
+            ])
             if (players[color].socket) players[color].socket?.emit('update-elo', 10)
         }
         if (players[oppositeColor(color)].token && rated) {
             mysqlQuery(
                 `update users set elo = ${
                     players[oppositeColor(color)].info.elo - 10
-                } where token = '${players[oppositeColor(color)].token}'`,
+                } where token = ?`,
+                [players[oppositeColor(color)].token],
             )
             if (players[oppositeColor(color)].socket)
                 players[oppositeColor(color)].socket?.emit('update-elo', -10)
         }
+        insertInto('games', {
+            started: startedDate,
+            ended: endedDate,
+            white_player: players.white.id ?? null,
+            black_player: players.black.id ?? null,
+            winner: players[color].id ?? null,
+            winner_color: color,
+            final_position: fen,
+        })
     }
 
     function notYourTurn(color) {
@@ -582,6 +622,10 @@ function Game(id, time, rated = false, isPublic = false) {
     }
 
     async function join(socket, token, color) {
+        const users = await mysqlQuery('select * from users where token = ?', [token])
+        if (users.length === 0) token = undefined
+        const user = users[0] ?? null
+
         if (state === 2) {
             socket.emit('join-room', 'error:Game already finished')
             return
@@ -598,6 +642,7 @@ function Game(id, time, rated = false, isPublic = false) {
                     players.white.socket = socket
                     players.white.timer = new Timer(secToMs(gameTime))
                     players.white.token = token
+                    players.white.id = user?.id ?? null
                     socket.emit('color', 'white')
                     socket.join(id)
                 } else if (players.black.socket === null) {
@@ -605,6 +650,7 @@ function Game(id, time, rated = false, isPublic = false) {
                     players.black.socket = socket
                     players.black.timer = new Timer(secToMs(gameTime))
                     players.black.token = token
+                    players.black.id = user?.id ?? null
                     socket.emit('color', 'black')
                     socket.join(id)
                 }
@@ -614,29 +660,29 @@ function Game(id, time, rated = false, isPublic = false) {
                     players[color].socket = socket
                     players[color].timer = new Timer(secToMs(gameTime))
                     players[color].token = token
+                    players[color].id = user?.id ?? null
                     socket.emit('color', color)
                     socket.join(id)
                     if (roomOwner.username === null) {
-                        const info = await getEloFromToken(token)
-                        if (token != null && info.username == null) {
+                        if (token != null && user.username == null) {
                             players[color].socket?.emit('sign-out')
                             leave(players[color].socket)
                             return
                         }
-                        roomOwner.username = info.username ?? 'Anonymous'
-                        roomOwner.elo = info.elo ?? '800?'
+                        roomOwner.username = user?.username ?? 'Anonymous'
+                        roomOwner.elo = user?.elo ?? '800?'
                     }
                 } else if (players[oppositeColor(color)].socket === null) {
                     joined = true
                     players[oppositeColor(color)].socket = socket
                     players[oppositeColor(color)].timer = new Timer(secToMs(gameTime))
                     players[oppositeColor(color)].token = token
+                    players[oppositeColor(color)].id = user?.id ?? null
                     socket.emit('color', oppositeColor(color))
                     socket.join(id)
                     if (roomOwner.username === null) {
-                        const info = await getEloFromToken(token)
-                        roomOwner.username = info.username || 'Anonymous'
-                        roomOwner.elo = info.elo || '800?'
+                        roomOwner.username = user?.username ?? 'Anonymous'
+                        roomOwner.elo = user?.elo ?? '800?'
                     }
                 }
             }
@@ -736,6 +782,8 @@ function Game(id, time, rated = false, isPublic = false) {
             }
         }
 
+        startedDate = new Date()
+
         io.to(id).emit('start', {
             gameTime,
             players: {
@@ -814,6 +862,8 @@ function Game(id, time, rated = false, isPublic = false) {
 
             players.white.timer?.reset()
             players.black.timer?.reset()
+
+            state = 1
 
             io.to(id).emit('update-timers', {
                 white: secToMs(gameTime),
