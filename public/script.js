@@ -10,7 +10,7 @@ import { ping, getColorForPing } from './modules/ping.js'
 
 import { serverDelay } from './modules/serverDelay.js'
 
-const socket = io('/advanced-chess2')
+const socket = io('/')
 
 const pingConfig = {
     good: {
