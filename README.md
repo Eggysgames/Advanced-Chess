@@ -1,9 +1,13 @@
 # Advanced Chess Engine
 
-Build off this repo - https://github.com/SirVoRaK/chess
+Building off this repo - https://github.com/SirVoRaK/chess
+
+04/07 - Fixed first move commit (SirVoRaK)
+
+- Simplified docker changes
 
 # Custom Changes
 
-- Working on changing to typescript
-- Working on getting online 
-- Working on docker/mysql changes
+- Working on changing to typescript (In Progress)
+- Working on getting online (In Progress)
+- Working on docker/mysql changes (In Progress)
