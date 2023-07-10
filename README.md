@@ -18,6 +18,7 @@ Building off this repo - https://github.com/SirVoRaK/chess
 - Working on changing to typescript (In Progress)
 - Working on docker/mysql changes (In Progress)
 - Change SMTP mailer address
+- Now supports SendGrid
 
 # Engine Features
 
