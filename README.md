@@ -19,7 +19,8 @@ Building off this repo - https://github.com/SirVoRaK/chess
 - Working on docker/mysql changes (In Progress)
 - Change SMTP mailer address
 - Now supports SendGrid (Can be changed from outlook only)
-
+- Email Auth Working
+- Designing React Pages
 
 # Engine Features
 
