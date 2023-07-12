@@ -6,6 +6,8 @@ Building off this repo - https://github.com/SirVoRaK/chess
 
 04/07 - Fixed port issue conflicts (Eggysgames)
 
+Playable - chess.eggysgames.com
+
 
 # Custom Changes
 
